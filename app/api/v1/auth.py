@@ -4,7 +4,7 @@ from datetime import timedelta
 from ...schemas.user import UserResponse, UserLogin
 from ...schemas.token import Token
 from ...services.file_service import save_file
-from ...services.refresh_token_service import create_refresh_token as store_refresh_token
+from ...services.refresh_token_service import create_refresh_token as store_refresh_token, get_refresh_token_by_token, revoke_refresh_token, update_refresh_token
 from ...core.security import hash_password, verify_password, create_access_token, create_refresh_token, parse_duration
 from ...core.config import settings
 from ...api.deps import get_db, auth
@@ -13,7 +13,7 @@ from ...schemas.response import create_response
 
 router = APIRouter()
 
-@router.post("/register", response_model=UserResponse)
+@router.post("/register")
 async def register(
     name: str = Form(...),
     email: str = Form(...),
@@ -46,7 +46,19 @@ async def register(
     db.commit()
     db.refresh(db_user)
 
-    return db_user
+    return create_response(
+        data={
+            
+                "id": db_user.id,
+                "name": db_user.name,
+                "email": db_user.email,
+                "role": db_user.role.value,
+                "is_active": db_user.is_active
+            
+        },
+        message="User registered successfully",
+        status_code=201 
+    )
 
 @router.post("/login")
 async def login(
@@ -80,7 +92,7 @@ async def login(
     )
 
     refresh_token_value = create_refresh_token(
-        data={"id": str(db_user.id), "email": db_user.email, "role": db_user.role.value}
+        data={"id": db_user.id, "email": db_user.email, "role": db_user.role.value}
     )
 
     # Store refresh token in database
@@ -117,5 +129,100 @@ async def login(
             }
         },
         message="Login successful",
+        status_code=200
+    )
+
+@router.post("/logout")
+async def logout(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db)
+):
+    """Logout user by revoking refresh token from database and cookies"""
+
+    # Check if refresh_token exists in cookies
+    refresh_token = request.cookies.get("refresh_token")
+
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Please sign in first")
+
+    # Search database for the refresh token
+    db_refresh_token = get_refresh_token_by_token(db, refresh_token)
+
+    if not db_refresh_token:
+        # Token not found in database, remove from cookies
+        response.delete_cookie(
+            key="refresh_token",
+            httponly=True,
+            secure=False,
+            samesite="lax"
+        )
+        raise HTTPException(status_code=400, detail="RefreshToken not found")
+
+    # Token found, revoke it from database
+    revoke_refresh_token(db, refresh_token)
+
+    # Remove refresh token from cookies
+    response.delete_cookie(
+        key="refresh_token",
+        httponly=True,
+        secure=False,
+        samesite="lax"
+    )
+
+    return create_response(
+        message="Logout successful",
+        status_code=200
+    )
+
+@router.post("/refresh")
+async def refresh_token(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db)
+):
+    """Refresh access token using refresh token from cookies"""
+
+    # Get refresh token from cookies
+    refresh_token = request.cookies.get("refresh_token")
+
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Please sign in first")
+    
+    print("Refresh token from cookie:", refresh_token)
+
+    # Update tokens using the refresh token
+    result = update_refresh_token(db, refresh_token)
+
+    if not result:
+        # Clear invalid refresh token from cookies
+        response.delete_cookie(
+            key="refresh_token",
+            httponly=True,
+            secure=False,
+            samesite="lax"
+        )
+        raise HTTPException(status_code=401, detail="You are not authorized")
+        
+
+    # Calculate refresh token expiry for cookie max_age
+    refresh_token_expires = parse_duration(settings.refresh_token_expire_time)
+
+    # Set new refresh token in cookies
+    response.set_cookie(
+        key="refresh_token",
+        value=result["refresh_token"],
+        httponly=True,
+        secure=False,  # Set to True in production with HTTPS
+        samesite="lax",
+        max_age=int(refresh_token_expires.total_seconds())
+    )
+
+    return create_response(
+        data={
+            "access_token": result["access_token"],
+            "role": result["role"]
+        },
+        message="Access token updated successfully",
         status_code=200
     )

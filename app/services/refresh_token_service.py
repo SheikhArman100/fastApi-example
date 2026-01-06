@@ -76,3 +76,54 @@ def get_user_active_tokens(db: Session, user_id: int) -> list[RefreshToken]:
         RefreshToken.is_revoked == 0,
         RefreshToken.expires_at > datetime.utcnow()
     ).all()
+
+def update_refresh_token(db: Session, old_token: str) -> dict:
+    """Update access token using refresh token"""
+    from ..core.security import verify_token, create_access_token, create_refresh_token
+    from ..models.user import User
+
+    # Find refresh token in database
+    db_refresh_token = get_refresh_token_by_token(db, old_token)
+    
+
+    if not db_refresh_token:
+        return None
+
+    # Check if token is active
+    if not db_refresh_token.is_active():
+        return None
+
+    # Verify the JWT token
+    payload = verify_token(old_token, settings.refresh_token_secret)
+    if not payload:
+        return None
+
+    # Check if token belongs to correct user
+    token_user_id = payload.get("id")
+    if str(db_refresh_token.user_id) != str(token_user_id):
+        return None
+
+    # Get user from database
+    user = db.query(User).filter(User.id == db_refresh_token.user_id).first()
+    if not user or not user.is_active:
+        return None
+
+    # Create new tokens
+    new_access_token = create_access_token(
+        data={"id": str(user.id), "email": user.email, "role": user.role.value}
+    )
+
+    new_refresh_token_value = create_refresh_token(
+        data={"id": user.id, "email": user.email, "role": user.role.value}
+    )
+
+    # Update refresh token in database
+    db_refresh_token.token = new_refresh_token_value
+    db_refresh_token.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {
+        "access_token": new_access_token,
+        "refresh_token": new_refresh_token_value,
+        "role": user.role.value
+    }
