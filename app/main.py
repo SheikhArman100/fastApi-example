@@ -5,6 +5,7 @@ import logging
 
 # import routers
 from .api.v1.auth import router as auth_router
+from .api.v1.user import router as user_router
 
 # import middleware
 from .middleware.error_handlers import register_error_handlers
@@ -44,6 +45,7 @@ async def check_database_connection():
 # Routers
 # ==============================
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(user_router, prefix="/api/v1/users", tags=["user"])
 
 # ==============================
 # Error Handlers
@@ -70,30 +72,6 @@ async def health_check():
         message="FastAPI application is healthy",
         status_code=200
     )
-
-
-    """User profile - accessible by admin and user roles"""
-    return create_response(
-        data={
-            "user": {
-                "id": user.id,
-                "name": user.name,
-                "email": user.email,
-                "role": user.role.value,
-                "is_active": user.is_active
-            }
-        },
-        message="User profile retrieved",
-        status_code=200
-    )
-
-
-# ==============================
-# Custom Application Error
-# ==============================
-class AppError(HTTPException):
-    def __init__(self, status_code: int, message: str):
-        super().__init__(status_code=status_code, detail=message)
 
 
 # ==============================

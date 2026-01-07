@@ -1,11 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Response, Request
+from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from sqlalchemy.orm import Session
-from datetime import timedelta
-from ...schemas.user import UserResponse, UserLogin
-from ...schemas.token import Token
-from ...services.file_service import save_file
+from ...schemas.user import UserLogin
 from ...services.refresh_token_service import create_refresh_token as store_refresh_token, get_refresh_token_by_token, revoke_refresh_token, update_refresh_token
-from ...core.security import hash_password, verify_password, create_access_token, create_refresh_token, parse_duration
+from ...core.security import verify_password, create_access_token, create_refresh_token, parse_duration
 from ...core.config import settings
 from ...api.deps import get_db, auth
 from ...models.user import User
@@ -13,52 +10,6 @@ from ...schemas.response import create_response
 
 router = APIRouter()
 
-@router.post("/register")
-async def register(
-    name: str = Form(...),
-    email: str = Form(...),
-    password: str = Form(...),
-    profile_image: UploadFile = File(...),
-    current_user: User = Depends(auth("admin")),  # Only admins can register users
-    db: Session = Depends(get_db)
-):
-    # Check if email already exists
-    db_user = db.query(User).filter(User.email == email).first()
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-
-    # Save the profile image in users module directory
-    file_id = save_file(db, profile_image, module="users")
-
-    # Hash the password
-    hashed_password = hash_password(password)
-
-    # Create the user record
-    db_user = User(
-        name=name,
-        email=email,
-        password=hashed_password,
-        profile_image_id=file_id,
-        created_by=current_user.id,  # Set creator as the admin user
-        updated_by=current_user.id   # Set updater as the admin user
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-
-    return create_response(
-        data={
-            
-                "id": db_user.id,
-                "name": db_user.name,
-                "email": db_user.email,
-                "role": db_user.role.value,
-                "is_active": db_user.is_active
-            
-        },
-        message="User registered successfully",
-        status_code=201 
-    )
 
 @router.post("/login")
 async def login(
@@ -188,8 +139,6 @@ async def refresh_token(
 
     if not refresh_token:
         raise HTTPException(status_code=401, detail="Please sign in first")
-    
-    print("Refresh token from cookie:", refresh_token)
 
     # Update tokens using the refresh token
     result = update_refresh_token(db, refresh_token)

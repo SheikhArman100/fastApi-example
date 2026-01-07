@@ -103,7 +103,7 @@ def not_found_exception_handler(request: Request, exc: StarletteHTTPException):
             content={
                 "success": False,
                 "statusCode": 404,
-                "message": "API not found",
+                "message": "Url not found",
                 "errorMessages": [
                     {
                         "path": request.url.path,
