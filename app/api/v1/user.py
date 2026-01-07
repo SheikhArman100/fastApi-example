@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Q
 from typing import Optional
 from sqlalchemy.orm import Session
 from ...services.file_service import save_file, delete_file
-from ...services.user_service import get_all_users, get_user_by_id, update_user, UserFilters, PaginationOptions
+from ...services.user_service import get_all_users, get_user_by_id, update_user, delete_user, UserFilters, PaginationOptions
 from ...core.security import hash_password
 from ...api.deps import get_db, auth
 from ...models.user import User
@@ -144,6 +144,26 @@ async def update_user_endpoint(
         return create_response(
             data=updated_user,
             message="User updated successfully",
+            status_code=200
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.delete("/{user_id}")
+async def delete_user_endpoint(
+    user_id: int,
+    current_user: User = Depends(auth("admin")),
+    db: Session = Depends(get_db)
+):
+    """Delete a user (Admin only)"""
+
+    try:
+        delete_user(db, user_id, current_user)
+        return create_response(
+            data=None,
+            message="User deleted successfully",
             status_code=200
         )
     except HTTPException:

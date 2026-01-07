@@ -183,6 +183,38 @@ def get_user_by_id(db: Session, user_id: int, current_user: User) -> Optional[Di
         "profile_image": profile_image
     }
 
+def delete_user(db: Session, user_id: int, current_user: User) -> bool:
+    """
+    Delete a user with authorization checks.
+    Only admins can delete users, and users cannot delete themselves.
+    """
+
+    # Check authorization - only admins can delete users
+    if current_user.role != Role.admin:
+        raise HTTPException(status_code=403, detail="Only administrators can delete users")
+
+    # Prevent self-deletion
+    if current_user.id == user_id:
+        raise HTTPException(status_code=400, detail="You cannot delete your own account")
+
+    # Get user from database
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Delete associated profile image if exists
+    if user.profile_image_id:
+        file_record = get_file_by_id(db, user.profile_image_id)
+        if file_record:
+            delete_file(file_record)
+
+    # Delete the user
+    db.delete(user)
+    db.commit()
+
+    return True
+
 def update_user(db: Session, user_id: int, update_data: Dict[str, Any], profile_image_file, current_user: User) -> Optional[Dict[str, Any]]:
     """
     Update user information with authorization checks.
