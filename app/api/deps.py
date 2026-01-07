@@ -34,7 +34,7 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
     # Get user from database
-    user_id = payload.get("sub")
+    user_id = payload.get("id")
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token payload")
 

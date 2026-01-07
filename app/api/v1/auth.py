@@ -20,24 +20,19 @@ async def login(
 ):
     """Login user and return access token with refresh token stored in database and cookie"""
 
-    # Find user by email
     db_user = db.query(User).filter(User.email == user_credentials.email).first()
     if not db_user:
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    # Verify password
     if not verify_password(user_credentials.password, db_user.password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
-    # Check if user is active
     if not db_user.is_active:
         raise HTTPException(status_code=401, detail="Account is deactivated")
 
-    # Get client information
     client_ip = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
 
-    # Create tokens (using env-configured expiry times)
     access_token = create_access_token(
         data={"id": str(db_user.id), "email": db_user.email, "role": db_user.role.value}
     )
@@ -46,7 +41,6 @@ async def login(
         data={"id": db_user.id, "email": db_user.email, "role": db_user.role.value}
     )
 
-    # Store refresh token in database
     store_refresh_token(
         db=db,
         user_id=db_user.id,
@@ -55,20 +49,17 @@ async def login(
         user_agent=user_agent
     )
 
-    # Calculate refresh token expiry for cookie max_age
     refresh_token_expires = parse_duration(settings.refresh_token_expire_time)
 
-    # Set refresh token as httpOnly cookie
     response.set_cookie(
         key="refresh_token",
         value=refresh_token_value,
-        httponly=True,  # Prevents JavaScript access
-        secure=False,   # Set to True in production with HTTPS
+        httponly=True,
+        secure=False,
         samesite="lax",
         max_age=int(refresh_token_expires.total_seconds())
     )
 
-    # Return access token in response
     return create_response(
         data={
             "access_token": access_token,

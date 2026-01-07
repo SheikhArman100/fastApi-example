@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import Optional
+from typing import Optional, Literal
 from datetime import datetime
 import re
 
@@ -91,6 +91,25 @@ class ChangePasswordRequest(BaseModel):
         if not re.search(r'[!@#$%^&*(),.?":{}|<>]', v):
             raise ValueError('Password must contain at least one special character')
         return v
+
+class UserFiltersQuery(BaseModel):
+    """Query parameters for user filtering"""
+    search_term: Optional[str] = Field(None, description="Search across name and email")
+    role: Optional[str] = Field(None, description="Filter by role (admin, user)")
+    email: Optional[str] = Field(None, description="Filter by email")
+    is_active: Optional[bool] = Field(None, description="Filter by active status")
+
+class UserPaginationQuery(BaseModel):
+    """Query parameters for user pagination"""
+    page: int = Field(1, ge=1, description="Page number (starts from 1)")
+    limit: int = Field(10, ge=1, le=100, description="Items per page (1-100)")
+    order_by: str = Field("created_at", description="Sort field")
+    order_direction: Literal["asc", "desc"] = Field("desc", description="Sort direction")
+
+class UserListResponse(BaseModel):
+    """Response model for user list endpoint"""
+    data: list[dict]
+    meta: dict
 
 class UserResponse(BaseModel):
     id: int
