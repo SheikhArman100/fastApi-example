@@ -1,9 +1,10 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import Optional, Literal
+from typing import Optional, Literal, Dict, Any
 from datetime import datetime
 import re
 
-class UserCreate(BaseModel):
+class UserCreateRequest(BaseModel):
+    """Request model for creating a new user"""
     name: str = Field(
         ...,
         min_length=2,
@@ -42,17 +43,6 @@ class UserCreate(BaseModel):
         if not re.search(r'[!@#$%^&*(),.?":{}|<>]', v):
             raise ValueError('Password must contain at least one special character')
         return v
-
-class UserLogin(BaseModel):
-    email: EmailStr = Field(
-        ...,
-        description="Valid email address"
-    )
-    password: str = Field(
-        ...,
-        min_length=1,
-        description="User password"
-    )
 
 class UserUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=50)

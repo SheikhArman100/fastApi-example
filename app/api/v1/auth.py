@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from sqlalchemy.orm import Session
-from ...schemas.user import UserLogin
+from ...schemas.auth import LoginRequest, TokenResponse, RefreshTokenResponse, AuthUserResponse
 from ...services.refresh_token_service import create_refresh_token as store_refresh_token, get_refresh_token_by_token, revoke_refresh_token, update_refresh_token
 from ...core.security import verify_password, create_access_token, create_refresh_token, parse_duration
 from ...core.config import settings
@@ -13,7 +13,7 @@ router = APIRouter()
 
 @router.post("/login")
 async def login(
-    user_credentials: UserLogin,
+    user_credentials: LoginRequest,
     request: Request,
     response: Response,
     db: Session = Depends(get_db)
