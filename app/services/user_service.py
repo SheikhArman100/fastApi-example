@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any, List
 from ..models.user import User, Role
 from ..schemas.response import create_paginated_response
 from ..utils.filtering import apply_search_filter, apply_dynamic_field_filters, calculate_pagination
+from ..services.file_service import get_file_by_id
 
 USER_FILTERABLE_FIELDS = ['search_term', 'role', 'email', 'is_active']
 USER_SEARCHABLE_FIELDS = ['name', 'email']
@@ -126,4 +127,45 @@ def get_all_users(
             "count": total_count,
             "totalPages": total_pages
         }
+    }
+
+def get_user_by_id(db: Session, user_id: int, current_user: User) -> Optional[Dict[str, Any]]:
+    """
+    Get a single user by ID with authorization checks.
+    Only admins can access other users, users can only access themselves.
+    """
+
+    # Check authorization
+    if current_user.role != Role.admin and current_user.id != user_id:
+        return None  # Not authorized to view this user
+
+    # Get user from database
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        return None  # User not found
+
+    # Get profile image details if exists
+    profile_image = None
+    if user.profile_image_id:
+        file_record = get_file_by_id(db, user.profile_image_id)
+        if file_record:
+            profile_image = {
+                "id": file_record.id,
+                "path": file_record.path,
+                "type": file_record.type,
+                "original_name": file_record.original_name,
+                "modified_name": file_record.modified_name
+            }
+
+    # Return user data (exclude sensitive information)
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "is_active": user.is_active,
+        "role": user.role.value,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+        "profile_image": profile_image
     }

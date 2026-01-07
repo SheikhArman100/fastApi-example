@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 from ...services.file_service import save_file
-from ...services.user_service import get_all_users, UserFilters, PaginationOptions
+from ...services.user_service import get_all_users, get_user_by_id, UserFilters, PaginationOptions
 from ...core.security import hash_password
 from ...api.deps import get_db, auth
 from ...models.user import User
@@ -88,4 +88,22 @@ async def get_all_users_endpoint(
         message="Users retrieved successfully",
         status_code=200,
         meta=result["meta"]
+    )
+
+@router.get("/{user_id}")
+async def get_user_by_id_endpoint(
+    user_id: int,
+    current_user: User = Depends(auth()),
+    db: Session = Depends(get_db)
+):
+    """Get a single user by ID"""
+    user_data = get_user_by_id(db, user_id, current_user)
+
+    if not user_data:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return create_response(
+        data=user_data,
+        message="User retrieved successfully",
+        status_code=200
     )

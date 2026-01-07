@@ -46,6 +46,10 @@ def get_file_path(file_record: File) -> str:
     """Get the full file path for a file record"""
     return file_record.path
 
+def get_file_by_id(db: Session, file_id: int):
+    """Get file details by ID"""
+    return db.query(File).filter(File.id == file_id).first()
+
 def delete_file(file_record: File) -> bool:
     """Delete file from disk and database"""
     try:
