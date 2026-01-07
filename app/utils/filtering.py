@@ -30,7 +30,7 @@ def apply_dynamic_field_filters(query: Query, filters_data: Dict[str, Any], filt
     additional_conditions = []
 
     for field_name, value in filters_data.items():
-        if field_name not in filterable_fields or not value:
+        if field_name not in filterable_fields or value is None or value == "":
             continue
 
         if hasattr(model_class, field_name):

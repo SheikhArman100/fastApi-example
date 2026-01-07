@@ -1,3 +1,4 @@
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, and_, func
 from typing import Optional, Dict, Any, List
@@ -107,6 +108,19 @@ def get_all_users(
     # Format user data (exclude sensitive information)
     user_data = []
     for user in users:
+        # Get profile image details if exists
+        profile_image = None
+        if user.profile_image_id:
+            file_record = get_file_by_id(db, user.profile_image_id)
+            if file_record:
+                profile_image = {
+                    "id": file_record.id,
+                    "path": file_record.path,
+                    "type": file_record.type,
+                    "original_name": file_record.original_name,
+                    "modified_name": file_record.modified_name
+                }
+
         user_dict = {
             "id": user.id,
             "name": user.name,
@@ -115,7 +129,7 @@ def get_all_users(
             "role": user.role.value,
             "created_at": user.created_at,
             "updated_at": user.updated_at,
-            "profile_image_id": user.profile_image_id
+            "profile_image": profile_image
         }
         user_data.append(user_dict)
 
@@ -137,13 +151,12 @@ def get_user_by_id(db: Session, user_id: int, current_user: User) -> Optional[Di
 
     # Check authorization
     if current_user.role != Role.admin and current_user.id != user_id:
-        return None  # Not authorized to view this user
-
+        raise HTTPException(status_code=403, detail="You are not authorized to access this user")
     # Get user from database
     user = db.query(User).filter(User.id == user_id).first()
 
     if not user:
-        return None  # User not found
+        raise HTTPException(status_code=404, detail="User not found")
 
     # Get profile image details if exists
     profile_image = None

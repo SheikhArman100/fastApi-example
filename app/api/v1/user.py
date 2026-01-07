@@ -66,7 +66,7 @@ async def get_all_users_endpoint(
     db: Session = Depends(get_db)
 ):
     """Get all users with filtering and pagination (Admin only)"""
-    print("Fetching users with filters and pagination")
+    
     pagination = PaginationOptions(
         page=page,
         limit=limit,
@@ -80,6 +80,9 @@ async def get_all_users_endpoint(
         email=email,
         is_active=is_active
     )
+
+    print("Filters:", filters.__dict__)
+    print("Pagination:", pagination.__dict__)
 
     result = get_all_users(db, filters, pagination, current_user)
 
