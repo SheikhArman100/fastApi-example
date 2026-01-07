@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from typing import Optional
 from sqlalchemy.orm import Session
-from ...services.file_service import save_file
-from ...services.user_service import get_all_users, get_user_by_id, UserFilters, PaginationOptions
+from ...services.file_service import save_file, delete_file
+from ...services.user_service import get_all_users, get_user_by_id, update_user, UserFilters, PaginationOptions
 from ...core.security import hash_password
 from ...api.deps import get_db, auth
 from ...models.user import User
@@ -81,8 +82,7 @@ async def get_all_users_endpoint(
         is_active=is_active
     )
 
-    print("Filters:", filters.__dict__)
-    print("Pagination:", pagination.__dict__)
+
 
     result = get_all_users(db, filters, pagination, current_user)
 
@@ -110,3 +110,43 @@ async def get_user_by_id_endpoint(
         message="User retrieved successfully",
         status_code=200
     )
+
+@router.put("/{user_id}")
+async def update_user_endpoint(
+    user_id: int,
+    name: str = Form(None, description="User name"),
+    email: str = Form(None, description="User email"),
+    role: str = Form(None, description="User role (admin/user)"),
+    is_active: bool = Form(None, description="User active status"),
+    profile_image: Optional[UploadFile] = File(None, description="Profile image file"),
+    current_user: User = Depends(auth()),
+    db: Session = Depends(get_db)
+):
+    """Update user information"""
+
+    # Prepare update data (exclude None values)
+    update_data = {}
+    if name is not None:
+        update_data['name'] = name
+    if email is not None:
+        update_data['email'] = email
+    if role is not None:
+        update_data['role'] = role
+    if is_active is not None:
+        update_data['is_active'] = is_active
+
+    try:
+        updated_user = update_user(db, user_id, update_data, profile_image, current_user)
+
+        if not updated_user:
+            raise HTTPException(status_code=404, detail="User not found or not authorized")
+
+        return create_response(
+            data=updated_user,
+            message="User updated successfully",
+            status_code=200
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

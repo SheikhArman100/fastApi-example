@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any, List
 from ..models.user import User, Role
 from ..schemas.response import create_paginated_response
 from ..utils.filtering import apply_search_filter, apply_dynamic_field_filters, calculate_pagination
-from ..services.file_service import get_file_by_id
+from ..services.file_service import get_file_by_id, save_file, delete_file
 
 USER_FILTERABLE_FIELDS = ['search_term', 'role', 'email', 'is_active']
 USER_SEARCHABLE_FIELDS = ['name', 'email']
@@ -172,6 +172,95 @@ def get_user_by_id(db: Session, user_id: int, current_user: User) -> Optional[Di
             }
 
     # Return user data (exclude sensitive information)
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "is_active": user.is_active,
+        "role": user.role.value,
+        "created_at": user.created_at,
+        "updated_at": user.updated_at,
+        "profile_image": profile_image
+    }
+
+def update_user(db: Session, user_id: int, update_data: Dict[str, Any], profile_image_file, current_user: User) -> Optional[Dict[str, Any]]:
+    """
+    Update user information with authorization checks.
+    Only admins can update other users, users can only update themselves.
+    Admins can update role and is_active, users can only update name, email, and profile_image.
+    """
+
+    # Check authorization
+    if current_user.role != Role.admin and current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="You are not authorized to update this user")
+
+    # Get user from database
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Handle profile image update if provided
+    if profile_image_file is not None and hasattr(profile_image_file, 'filename') and profile_image_file.filename:
+        # Delete old profile image if exists
+        if user.profile_image_id:
+            old_file = get_file_by_id(db, user.profile_image_id)
+            if old_file:
+                delete_file(old_file)
+
+        # Save new profile image
+        new_file_id = save_file(db, profile_image_file, module="users")
+        user.profile_image_id = new_file_id
+
+    # Update user fields based on permissions
+    if current_user.role == Role.admin:
+        # Admins can update everything
+        if 'name' in update_data:
+            user.name = update_data['name']
+        if 'email' in update_data:
+            # Check if email is already taken by another user
+            existing_user = db.query(User).filter(User.email == update_data['email'], User.id != user_id).first()
+            if existing_user:
+                raise HTTPException(status_code=400, detail="Email already taken")
+            user.email = update_data['email']
+        if 'role' in update_data:
+            try:
+                user.role = Role(update_data['role'].lower())
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid role")
+        if 'is_active' in update_data:
+            user.is_active = update_data['is_active']
+    else:
+        # Regular users can only update name, email, and profile image
+        if 'name' in update_data:
+            user.name = update_data['name']
+        if 'email' in update_data:
+            # Check if email is already taken by another user
+            existing_user = db.query(User).filter(User.email == update_data['email'], User.id != user_id).first()
+            if existing_user:
+                raise HTTPException(status_code=400, detail="Email already taken")
+            user.email = update_data['email']
+        # Regular users cannot update role or is_active
+
+    user.updated_by = current_user.id
+    user.updated_at = func.now()
+
+    db.commit()
+    db.refresh(user)
+
+    # Return updated user data with profile image details
+    profile_image = None
+    if user.profile_image_id:
+        file_record = get_file_by_id(db, user.profile_image_id)
+        if file_record:
+            profile_image = {
+                "id": file_record.id,
+                "path": file_record.path,
+                "type": file_record.type,
+                "original_name": file_record.original_name,
+                "modified_name": file_record.modified_name
+            }
+
     return {
         "id": user.id,
         "name": user.name,
