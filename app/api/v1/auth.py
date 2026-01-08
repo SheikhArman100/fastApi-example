@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from sqlalchemy.orm import Session
-from ...schemas.auth import LoginRequest, TokenResponse, RefreshTokenResponse, AuthUserResponse
+from ...schemas.auth import LoginRequest, TokenResponse, RefreshTokenResponse, AuthUserResponse, ChangePasswordRequest
 from ...services.refresh_token_service import create_refresh_token as store_refresh_token, get_refresh_token_by_token, revoke_refresh_token, update_refresh_token
+from ...services.user_service import change_password
 from ...core.security import verify_password, create_access_token, create_refresh_token, parse_duration
 from ...core.config import settings
 from ...api.deps import get_db, auth
@@ -166,3 +167,30 @@ async def refresh_token(
         message="Access token updated successfully",
         status_code=200
     )
+
+@router.put("/change-password")
+async def change_password_endpoint(
+    password_data: ChangePasswordRequest,
+    current_user: User = Depends(auth()),
+    db: Session = Depends(get_db)
+):
+    """Change user password"""
+
+    try:
+        change_password(
+            db=db,
+            user_id=current_user.id,
+            current_password=password_data.current_password,
+            new_password=password_data.new_password,
+            current_user=current_user
+        )
+
+        return create_response(
+            data=None,
+            message="Password changed successfully",
+            status_code=200
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

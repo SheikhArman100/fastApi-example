@@ -6,6 +6,7 @@ from ..models.user import User, Role
 from ..schemas.response import create_paginated_response
 from ..utils.filtering import apply_search_filter, apply_dynamic_field_filters, calculate_pagination
 from ..services.file_service import get_file_by_id, save_file, delete_file
+from ..core.security import verify_password, hash_password
 
 USER_FILTERABLE_FIELDS = ['search_term', 'role', 'email', 'is_active']
 USER_SEARCHABLE_FIELDS = ['name', 'email']
@@ -211,6 +212,38 @@ def delete_user(db: Session, user_id: int, current_user: User) -> bool:
 
     # Delete the user
     db.delete(user)
+    db.commit()
+
+    return True
+
+def change_password(db: Session, user_id: int, current_password: str, new_password: str, current_user: User) -> bool:
+    """
+    Change user password with validation.
+    Users can only change their own password.
+    """
+
+    # Check authorization - users can only change their own password
+    if current_user.id != user_id:
+        raise HTTPException(status_code=403, detail="You can only change your own password")
+
+    # Get user from database
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Verify current password
+    if not verify_password(current_password, user.password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+
+    # Hash new password
+    hashed_new_password = hash_password(new_password)
+
+    # Update password
+    user.password = hashed_new_password
+    user.updated_by = current_user.id
+    user.updated_at = func.now()
+
     db.commit()
 
     return True
