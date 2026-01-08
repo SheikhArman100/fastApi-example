@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     smtp_password: str
     smtp_from_email: str
 
+    # AI/Gemini Configuration
+    google_api_key: str
+
     class Config:
         env_file = ".env"
 

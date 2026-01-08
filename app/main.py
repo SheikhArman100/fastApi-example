@@ -6,6 +6,7 @@ import logging
 # import routers
 from .api.v1.auth import router as auth_router
 from .api.v1.user import router as user_router
+from .api.v1.ai import router as ai_router
 
 # import middleware
 from .middleware.error_handlers import register_error_handlers
@@ -46,6 +47,7 @@ async def check_database_connection():
 # ==============================
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(user_router, prefix="/api/v1/users", tags=["user"])
+app.include_router(ai_router, prefix="/api/v1/ai", tags=["ai"])
 
 # ==============================
 # Error Handlers

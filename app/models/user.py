@@ -26,5 +26,6 @@ class User(Base):
     # relationships
     profile_image = relationship("File")
     refresh_tokens = relationship("RefreshToken", back_populates="user")
+    ai_sessions = relationship("AISession", back_populates="user")
     creator = relationship("User", remote_side=[id], foreign_keys=[created_by])
     updater = relationship("User", remote_side=[id], foreign_keys=[updated_by])
