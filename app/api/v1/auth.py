@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from sqlalchemy.orm import Session
-from ...schemas.auth import LoginRequest, TokenResponse, RefreshTokenResponse, AuthUserResponse, ChangePasswordRequest
+from ...schemas.auth import LoginRequest, TokenResponse, RefreshTokenResponse, AuthUserResponse, ChangePasswordRequest, ForgetPasswordRequest, ResetPasswordRequest
 from ...services.refresh_token_service import create_refresh_token as store_refresh_token, get_refresh_token_by_token, revoke_refresh_token, update_refresh_token
-from ...services.user_service import change_password
+from ...services.user_service import change_password, forget_password, reset_password
 from ...core.security import verify_password, create_access_token, create_refresh_token, parse_duration
 from ...core.config import settings
 from ...api.deps import get_db, auth
@@ -191,6 +191,38 @@ async def change_password_endpoint(
             message="Password changed successfully",
             status_code=200
     )
+
+@router.post("/forget-password")
+async def forget_password_endpoint(
+    forget_data: ForgetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """Send forget password email with reset link"""
+
+   
+    result = forget_password(db, forget_data.email)
+    return create_response(
+            data=result,
+            message="Password reset email sent successfully",
+            status_code=200
+    )
+    
+
+@router.post("/reset-password")
+async def reset_password_endpoint(
+    reset_data: ResetPasswordRequest,
+    db: Session = Depends(get_db)
+):
+    """Reset password using forget password token"""
+
+    
+    result = reset_password(db, reset_data.token, reset_data.new_password)
+    return create_response(
+            data=result,
+            message="Password reset successfully",
+            status_code=200
+        )
+    
     
 
 @router.get("/user")

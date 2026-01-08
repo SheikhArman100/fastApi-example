@@ -59,6 +59,26 @@ def create_refresh_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, settings.refresh_token_secret, algorithm="HS256")
     return encoded_jwt
 
+def create_forget_password_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """Create forget password token with specific secret and expiry"""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        # Use configured expiry time from env
+        expire = datetime.utcnow() + parse_duration(settings.forget_password_expire_time)
+    to_encode.update({"exp": expire, "type": "forget_password"})
+    encoded_jwt = jwt.encode(to_encode, settings.forget_password_secret, algorithm="HS256")
+    return encoded_jwt
+
+def verify_forget_password_token(token: str):
+    """Verify forget password token and return payload"""
+    try:
+        payload = jwt.decode(token, settings.forget_password_secret, algorithms=["HS256"])
+        return payload
+    except JWTError:
+        return None
+
 def verify_token(token: str, secret_key: str = None):
     """Verify JWT token and return payload"""
     try:

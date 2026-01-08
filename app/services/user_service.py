@@ -6,7 +6,9 @@ from ..models.user import User, Role
 from ..schemas.response import create_paginated_response
 from ..utils.filtering import apply_search_filter, apply_dynamic_field_filters, calculate_pagination
 from ..services.file_service import get_file_by_id, save_file, delete_file
-from ..core.security import verify_password, hash_password
+from ..core.security import verify_password, hash_password, create_forget_password_token, verify_forget_password_token
+from ..utils.email import send_email
+from ..core.config import settings
 
 USER_FILTERABLE_FIELDS = ['search_term', 'role', 'email', 'is_active']
 USER_SEARCHABLE_FIELDS = ['name', 'email']
@@ -215,6 +217,75 @@ def delete_user(db: Session, user_id: int, current_user: User) -> bool:
     db.commit()
 
     return True
+
+def forget_password(db: Session, email: str) -> Dict[str, Any]:
+    """
+    Initiate forget password process by sending reset email.
+    """
+
+    # Find user by email
+    user = db.query(User).filter(User.email == email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Create forget password token
+    token_data = {
+        "id": str(user.id),
+        "email": user.email
+    }
+    forget_password_token = create_forget_password_token(token_data)
+
+    # Send email with reset link
+    reset_link = f"{settings.client_url}/auth/reset-password?token={forget_password_token}"
+
+    email_html = f"""
+    <div>
+      <p>Hi, {user.name}</p>
+      <p>We received a request to reset your password for your account. If you requested this password reset, please click the link below within the next {settings.forget_password_expire_time} to set a new password:</p>
+      <p>
+        <strong>Reset password link:</strong> <a href="{reset_link}">Click Here</a>
+      </p>
+      <p>If you did not request a password reset, you can safely ignore this email.</p>
+      <p>Thank you<br>Your App Team</p>
+    </div>
+    """
+
+    email_sent = send_email(user.email, email_html, "Password Reset Request")
+
+    if not email_sent:
+        raise HTTPException(status_code=500, detail="Failed to send reset email")
+
+    return {"id": user.id}
+
+def reset_password(db: Session, token: str, new_password: str) -> Dict[str, Any]:
+    """
+    Reset user password using forget password token.
+    """
+
+    # Verify token
+    verified_token = verify_forget_password_token(token)
+
+    if not verified_token:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    # Find user by email from token
+    user = db.query(User).filter(User.email == verified_token["email"]).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Hash new password
+    hashed_password = hash_password(new_password)
+
+    # Update user password
+    user.password = hashed_password
+    user.updated_by = user.id  # Self-update
+    user.updated_at = func.now()
+
+    db.commit()
+
+    return {"id": user.id}
 
 def change_password(db: Session, user_id: int, current_password: str, new_password: str, current_user: User) -> bool:
     """
