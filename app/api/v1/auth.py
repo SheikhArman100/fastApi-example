@@ -8,6 +8,7 @@ from ...core.config import settings
 from ...api.deps import get_db, auth
 from ...models.user import User
 from ...schemas.response import create_response
+from ...services.file_service import get_file_by_id
 
 router = APIRouter()
 
@@ -176,8 +177,8 @@ async def change_password_endpoint(
 ):
     """Change user password"""
 
-    try:
-        change_password(
+   
+    change_password(
             db=db,
             user_id=current_user.id,
             current_password=password_data.current_password,
@@ -185,12 +186,66 @@ async def change_password_endpoint(
             current_user=current_user
         )
 
-        return create_response(
+    return create_response(
             data=None,
             message="Password changed successfully",
             status_code=200
+    )
+    
+
+@router.get("/user")
+async def get_auth_user(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),  
+):
+    """Get authenticated user info using refresh token from cookies"""
+
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Please sign in first")
+    
+    db_refresh_token = get_refresh_token_by_token(db, refresh_token)
+    if not db_refresh_token:
+        response.delete_cookie(
+            key="refresh_token",
+            httponly=True,
+            secure=False,
+            samesite="lax"
         )
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=401, detail="You are not authorized")
+    db_user = db.query(User).filter(User.id == db_refresh_token.user_id).first()
+    if not db_user:
+        response.delete_cookie(
+            key="refresh_token",
+            httponly=True,
+            secure=False,
+            samesite="lax"
+        )
+        raise HTTPException(status_code=401, detail="You are not authorized")
+    
+    # get user profile image
+    # Get profile image details if exists
+    db_profile_image = None
+    if db_user.profile_image_id:
+        file_record = get_file_by_id(db, db_user.profile_image_id)
+        if file_record:
+            db_profile_image = {
+                "id": file_record.id,
+                "path": file_record.path,
+                "type": file_record.type,
+                "original_name": file_record.original_name,
+                "modified_name": file_record.modified_name
+            }
+
+    return create_response(
+        data={
+            "id": db_user.id,
+            "name": db_user.name,
+            "email": db_user.email,
+            "role": db_user.role.value,
+            "profile_image": db_profile_image
+        },
+        message="User fetched successfully",
+        status_code=200
+    )
